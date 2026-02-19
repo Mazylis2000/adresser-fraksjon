@@ -235,12 +235,21 @@ async function geocode(query) {
 
     if (error) return { ok: false, message: `DB error: ${error.message}` };
 
-    const wideRows = data || [];
-    const wideDays = Array.from(
-      new Set(wideRows.map((r) => r.ukedag).filter((d) => d >= 1 && d <= 7))
-    ).sort((a, b) => a - b);
+ const wideRows = (data || []).map(r => ({
+  postnumr: String(r.Postnummer || "").trim(),
+  sted: String(r.Sted || "").trim(),
+  gate: String(r["Gate/vei"] || "").trim(),
+  husnumr: String(r.Husnummer || "").trim(),
+  avfall_code: String(r.Avfall || "").trim(),
+  ukedag: Number(r.Ukedag || 0),
+}));
 
-    return { ok: true, prefix3, wideRows, wideDays, count: wideRows.length };
+const wideDays = Array.from(
+  new Set(wideRows.map(r => r.ukedag).filter(d => d >= 1 && d <= 7))
+).sort((a,b)=>a-b);
+
+return { ok:true, prefix3, wideRows, wideDays, count: wideRows.length };
+
   }
 
   function renderResult(text) {
@@ -287,6 +296,8 @@ async function geocode(query) {
           )}\n\n${res.message}`
         );
       }
+
+console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
 
       const frText = (f.fraksjonLabel || "Fraksjon").trim();
       const wideNames = res.wideDays.map(dayNameNO).filter(Boolean);
