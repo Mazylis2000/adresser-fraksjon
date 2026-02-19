@@ -1,8 +1,9 @@
+
 // =========================
 // CONFIG (fill these 2)
 // =========================
-const SUPABASE_URL = "PUT_YOUR_SUPABASE_URL_HERE";
-const SUPABASE_ANON_KEY = "PUT_YOUR_SUPABASE_ANON_KEY_HERE";
+const SUPABASE_URL = "https://dvwatiyiwpsrtdkbwkhj.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_R-sBV_gQ6AO9yRXYt2a6dA_dgT-Yop8";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
