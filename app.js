@@ -285,18 +285,45 @@ return { ok:true, prefix3, wideRows, wideDays, count: wideRows.length };
       const lat = Number(g.lat),
         lon = Number(g.lon);
 
-      if (marker) marker.remove();
-      marker = L.marker([lat, lon]).addTo(map);
-      map.setView([lat, lon], 15);
+     if (marker) marker.remove();
+marker = L.marker([lat, lon]).addTo(map);
+map.setView([lat, lon], 15);
 
-      const res = await findDaysForAreaFromDB(f);
-      if (!res.ok) {
-        return renderResult(
-          `Kart: ${g.display_name}\nKoordinater: ${lat.toFixed(5)}, ${lon.toFixed(
-            5
-          )}\n\n${res.message}`
-        );
-      }
+const res = await findDaysForAreaFromDB(f);
+
+// --- LOG SEARCH (search_logs) - loginam VISADA (ir kai 0 / error) ---
+try {
+  const { data: { session } } = await sb.auth.getSession();
+
+  const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
+  const avfall_codes = Array.from(codesSet);
+
+  await sb.from("search_logs").insert([{
+    user_id: session?.user?.id || null,
+    postkode: f.postkode || null,
+    sted: f.by || null,
+    adresse: f.adresse || null,
+    fraksjon: f.fraksjonGroup || null,
+    post_prefix3: cleanDigits(f.postkode).slice(0, 3) || null,
+    avfall_codes,
+    results_count: Number(res?.count || 0),
+    lat: Number.isFinite(lat) ? lat : null,
+    lon: Number.isFinite(lon) ? lon : null
+  }]);
+} catch (e) {
+  console.warn("search_logs insert failed:", e);
+}
+// --- END LOG ---
+
+if (!res.ok) {
+  return renderResult(
+    `Kart: ${g.display_name}\nKoordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n${res.message}`
+  );
+}
+
+
+     
+
 
 console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
 
