@@ -123,11 +123,14 @@ window.addEventListener("load", async () => {
       "&q=" +
       encodeURIComponent(q);
 
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error("Geocode error: " + res.status);
-    const data = await res.json();
-    return data?.[0] ?? null;
+  const res = await fetch(url, {
+  headers: {
+    "Accept": "application/json",
+    "User-Agent": "adresai-fraksjon/1.0 (web)",
+    "Referer": window.location.href
   }
+});
+
 
   function markerTooltip(addr, daysArr) {
     const days = (daysArr || []).map(dayNameNO).filter(Boolean);
