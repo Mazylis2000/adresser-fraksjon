@@ -140,10 +140,11 @@ async function geocode(query) {
 
 
 
-  function markerTooltip(addr, daysArr) {
-    const days = (daysArr || []).map(dayNameNO).filter(Boolean);
-    return `${addr}\nUkedag: ${days.length ? days.join(" / ") : "-"}`;
-  }
+ function markerTooltip(addr, daysArr){
+  const days = (daysArr || []).map(dayNameNO).filter(Boolean);
+  return `<b>${addr}</b><br>Ukedag: ${days.length ? days.join(" / ") : "-"}`;
+}
+
 
   async function geocodeCached(key, query) {
     if (geoCache.has(key)) return geoCache.get(key);
