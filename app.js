@@ -111,24 +111,32 @@ window.addEventListener("load", async () => {
     await refreshAuthUI();
   });
 
-  // ---------- Geocode (Norway only) ----------
-  async function geocode(query) {
-    const q = `${query}, Norge`;
-    const url =
-      "https://nominatim.openstreetmap.org/search" +
-      "?format=json&limit=1" +
-      "&countrycodes=no" +
-      "&addressdetails=1" +
-      "&accept-language=no" +
-      "&q=" +
-      encodeURIComponent(q);
+ // ---------- Geocode (Norway only) ----------
+async function geocode(query) {
+  const q = `${query}, Norge`;
+  const url =
+    "https://nominatim.openstreetmap.org/search" +
+    "?format=json&limit=1" +
+    "&countrycodes=no" +
+    "&addressdetails=1" +
+    "&accept-language=no" +
+    "&q=" +
+    encodeURIComponent(q);
 
   const res = await fetch(url, {
-  headers: {
-    "Accept": "application/json",
-    "User-Agent": "adresai-fraksjon/1.0 (web)",
-    "Referer": window.location.href
-  }
+    headers: {
+      Accept: "application/json",
+      // User-Agent naršyklėje dažnai būna blokuojamas, bet paliekam saugiai:
+      // "User-Agent": "adresai-fraksjon/1.0 (web)",
+      // Referer irgi nereikia — naršyklė pati siunčia.
+    },
+  });
+
+  if (!res.ok) throw new Error("Geocode error: " + res.status);
+  const data = await res.json();
+  return data?.[0] ?? null;
+}
+
 
 
 
