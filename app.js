@@ -56,7 +56,7 @@ window.addEventListener("load", async () => {
   function showLogin(msg) {
     el("loginBox").classList.remove("hide");
     el("appBox").classList.add("hide");
-    setText("loginMsg", msg || "Prisijunk.");
+    setText("loginMsg", msg || "Logg Inn.");
   }
   function showApp() {
     el("loginBox").classList.add("hide");
