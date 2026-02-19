@@ -4,9 +4,7 @@ import formidable from "formidable";
 import * as XLSX from "xlsx";
 
 export const config = {
-  api: {
-    bodyParser: false, // required for formidable
-  },
+  api: { bodyParser: false }, // required for formidable
 };
 
 function json(res, status, obj) {
@@ -17,6 +15,13 @@ function json(res, status, obj) {
 
 function cleanDigits(v) {
   return String(v ?? "").replace(/\D+/g, "");
+}
+
+function padPostnumr4(v) {
+  const d = cleanDigits(v);
+  if (!d) return "";
+  // Norway postnummer = 4 digits. If Excel gave 3 digits, pad left with 0.
+  return d.padStart(4, "0").slice(0, 4);
 }
 
 function normalizeHeaderKey(k) {
@@ -48,33 +53,55 @@ function buildRowsFromXlsx(buffer) {
 
   const out = [];
   for (const r of rows) {
-    const postnumr = cleanDigits(
+    const postnumr = padPostnumr4(
       pickField(r, ["Postnumr", "Postnummer", "Postnr", "Postkode"])
     );
+
     const gate = String(
       pickField(r, ["Gate/vei", "Gate", "Vei", "Adresse", "Gatevei"]) ?? ""
     ).trim();
+
     const husnumr = String(
       pickField(r, ["Husnumr", "Husnummer", "Husnr"]) ?? ""
     ).trim();
-    const sted = String(pickField(r, ["Sted", "By", "Poststed"]) ?? "").trim();
-    const avfall = cleanDigits(pickField(r, ["Avfall", "Fraksjon", "Avfallskode"]));
-    const ukedag = Number(cleanDigits(pickField(r, ["Ukedag", "UkeDag", "Dag"])) || 0);
 
-    if (!postnumr && !gate && !husnumr && !sted) continue;
+    const sted = String(
+      pickField(r, ["Sted", "By", "Poststed"]) ?? ""
+    ).trim();
 
-    // stable key (so we can upsert)
-    const key = `${postnumr}|${gate.toLowerCase()}|${husnumr.toLowerCase()}|${sted.toLowerCase()}|${avfall}`;
+    const avfall_code = cleanDigits(
+      pickField(r, ["Avfall", "Fraksjon", "Avfallskode", "Avfall_code"])
+    );
+
+    const ukedag = Number(
+      cleanDigits(pickField(r, ["Ukedag", "UkeDag", "Dag"])) || 0
+    );
+
+    // skip empty rows
+    if (!postnumr && !gate && !husnumr && !sted && !avfall_code) continue;
+
+    const post_prefix3 = postnumr ? postnumr.slice(0, 3) : "";
+
+    // stable key for upsert
+    // (include ukedag if you want separate rows per weekday; if not, remove ukedag from key)
+    const key = [
+      postnumr,
+      gate.toLowerCase(),
+      husnumr.toLowerCase(),
+      sted.toLowerCase(),
+      avfall_code,
+      String(ukedag || 0),
+    ].join("|");
 
     out.push({
-      key,                 // unique key
+      key,
       postnumr,
-      postprefix3: postnumr ? postnumr.slice(0, 3) : "",
+      post_prefix3,
+      sted,
       gate,
       husnumr,
-      sted,
-      avfall,
-      ukedag,
+      avfall_code,
+      ukedag, // if your table doesn't have this column, we auto-fallback later
     });
   }
 
@@ -87,7 +114,6 @@ function parseMultipart(req) {
       multiples: false,
       maxFileSize: 25 * 1024 * 1024, // 25MB
     });
-
     form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
       resolve({ fields, files });
@@ -96,11 +122,35 @@ function parseMultipart(req) {
 }
 
 async function readUploadedFileBuffer(fileObj) {
-  // formidable v2/v3: fileObj.filepath
   const fs = await import("fs/promises");
   const path = fileObj?.filepath;
   if (!path) throw new Error("No filepath on uploaded file");
   return fs.readFile(path);
+}
+
+async function upsertChunk(supabase, chunk) {
+  // 1) try with ukedag
+  let { data, error } = await supabase
+    .from("addresses")
+    .upsert(chunk, { onConflict: "key" })
+    .select("key");
+
+  if (!error) return { data, usedUkedag: true };
+
+  // 2) if ukedag column doesn't exist, retry without it
+  const msg = String(error?.message || error);
+  if (msg.toLowerCase().includes("column") && msg.toLowerCase().includes("ukedag")) {
+    const chunk2 = chunk.map(({ ukedag, ...rest }) => rest);
+    const r2 = await supabase
+      .from("addresses")
+      .upsert(chunk2, { onConflict: "key" })
+      .select("key");
+    if (r2.error) throw r2.error;
+    return { data: r2.data, usedUkedag: false };
+  }
+
+  // other errors -> throw
+  throw error;
 }
 
 export default async function handler(req, res) {
@@ -108,7 +158,8 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       return json(res, 200, {
         ok: true,
-        message: "API is alive. Use POST multipart/form-data with field name: file",
+        message:
+          "API is alive. Use POST multipart/form-data with field name: file (optionally dryRun=1).",
         env: {
           SUPABASE_URL: !!process.env.SUPABASE_URL,
           SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
@@ -122,7 +173,10 @@ export default async function handler(req, res) {
     }
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return json(res, 500, { ok: false, error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" });
+      return json(res, 500, {
+        ok: false,
+        error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+      });
     }
 
     const supabase = createClient(
@@ -136,14 +190,20 @@ export default async function handler(req, res) {
 
     const file = files?.file;
     if (!file) {
-      return json(res, 400, { ok: false, error: "No file uploaded. Use field name 'file'." });
+      return json(res, 400, {
+        ok: false,
+        error: "No file uploaded. Use field name 'file'.",
+      });
     }
 
     const buf = await readUploadedFileBuffer(file);
     const { sheetName, rows } = buildRowsFromXlsx(buf);
 
     if (rows.length === 0) {
-      return json(res, 400, { ok: false, error: "No rows parsed from Excel (check columns / sheet)." });
+      return json(res, 400, {
+        ok: false,
+        error: "No rows parsed from Excel (check columns / sheet).",
+      });
     }
 
     if (dryRun) {
@@ -156,20 +216,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // IMPORTANT: create table "addresses" with unique key on "key"
-    // Upsert in chunks to avoid payload limits
     const chunkSize = 1000;
     let upserted = 0;
+    let usedUkedag = null;
 
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
-      const { error, data } = await supabase
-        .from("addresses")
-        .upsert(chunk, { onConflict: "key" })
-        .select("key");
-
-      if (error) throw error;
-      upserted += data?.length ?? 0;
+      const r = await upsertChunk(supabase, chunk);
+      upserted += r.data?.length ?? 0;
+      if (usedUkedag === null) usedUkedag = r.usedUkedag;
     }
 
     return json(res, 200, {
@@ -177,6 +232,9 @@ export default async function handler(req, res) {
       sheetName,
       parsedRows: rows.length,
       upserted,
+      note: usedUkedag === false
+        ? "Upsert done WITHOUT ukedag (column not found in table)."
+        : "Upsert done WITH ukedag.",
     });
   } catch (err) {
     return json(res, 500, { ok: false, error: String(err?.message ?? err) });
