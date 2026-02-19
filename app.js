@@ -129,7 +129,7 @@ window.addEventListener("load", async () => {
     "User-Agent": "adresai-fraksjon/1.0 (web)",
     "Referer": window.location.href
   }
-});
+
 
 
   function markerTooltip(addr, daysArr) {
