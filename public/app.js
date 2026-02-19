@@ -112,30 +112,18 @@ window.addEventListener("load", async () => {
   });
 
  // ---------- Geocode (Norway only) ----------
+// NOTE: per Vercel reikia per proxy endpoint'ą /api/geocode (server-side),
+// nes tiesioginis fetch į nominatim.openstreetmap.org dažnai būna blokuojamas CORS.
 async function geocode(query) {
   const q = `${query}, Norge`;
-  const url =
-    "https://nominatim.openstreetmap.org/search" +
-    "?format=json&limit=1" +
-    "&countrycodes=no" +
-    "&addressdetails=1" +
-    "&accept-language=no" +
-    "&q=" +
-    encodeURIComponent(q);
 
-  const res = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      // User-Agent naršyklėje dažnai būna blokuojamas, bet paliekam saugiai:
-      // "User-Agent": "adresai-fraksjon/1.0 (web)",
-      // Referer irgi nereikia — naršyklė pati siunčia.
-    },
-  });
+  const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error("Geocode proxy error: " + res.status);
 
-  if (!res.ok) throw new Error("Geocode error: " + res.status);
-  const data = await res.json();
-  return data?.[0] ?? null;
+  const json = await res.json();
+  return json?.item ?? null;
 }
+
 
 
 
