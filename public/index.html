@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="lt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Adresser med fraksjon</title>
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+    defer
+  ></script>
+
+  <!-- SheetJS (read Excel in browser for ADMIN upload) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+
+  <!-- Supabase JS (browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+
+  <style>
+    :root{
+      --panel:#111827; --panel2:#0f172a;
+      --text:#e5e7eb; --muted:#9ca3af; --border:rgba(255,255,255,.12);
+      --radius:14px; --accent:#22c55e; --warn:#f59e0b;
+    }
+
+    /* ---------- SELECT DROPDOWN FIX ---------- */
+    select{
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    select option{
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    select option[value=""]{
+      color: #9ca3af;
+    }
+    /* ---------------------------------------- */
+
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background:radial-gradient(1200px 800px at 10% 10%, #111827, #0b0f14);
+      color:var(--text); height:100vh; overflow:hidden;
+    }
+    .app{display:flex;height:100vh;gap:12px;padding:12px}
+    .left{
+      width:30%;min-width:340px;max-width:560px;
+      background:linear-gradient(180deg,var(--panel),var(--panel2));
+      border:1px solid var(--border);border-radius:var(--radius);
+      padding:14px;display:flex;flex-direction:column;overflow:hidden;
+    }
+
+    .right{width:70%;flex:1;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;position:relative;background:#0a0f16}
+
+    /* LOGO */
+    .ngLogo{
+      height: 34px;
+      width: auto;
+      display:block;
+      margin: 0 0 10px 0;
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,.35));
+    }
+
+    header h1{margin:0 0 6px;font-size:18px}
+    header p{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.35}
+    .pill{
+      display:inline-block; padding:3px 8px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.16); color:var(--muted); font-size:12px;
+      margin-right:6px;
+    }
+    .form{display:grid;gap:10px;overflow:auto;padding-bottom:10px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input,select{
+      width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);
+      border-radius:10px;padding:10px 12px;color:var(--text);outline:none;font-size:14px;
+    }
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions{display:flex;gap:10px;margin-top:6px}
+    button{
+      border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--text);
+      padding:10px 12px;border-radius:12px;font-weight:650;cursor:pointer;flex:1;
+    }
+    button.primary{border-color:rgba(34,197,94,.55);background:rgba(34,197,94,.14)}
+    button.secondary{border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.10)}
+    button.danger{border-color:rgba(239,68,68,.55);background:rgba(239,68,68,.10)}
+    .result{
+      margin-top:10px;padding:12px;border-radius:12px;border:1px dashed rgba(255,255,255,.18);
+      background:rgba(255,255,255,.03);overflow:auto;min-height:170px;
+    }
+    .result h2{margin:0 0 8px;font-size:14px}
+    .result .line{font-size:13px;line-height:1.4;color:#d1d5db;white-space:pre-wrap}
+    #map{width:100%;height:100%}
+    .mapHint{
+      position:absolute;top:10px;left:10px;z-index:500;
+      background:rgba(17,24,39,.75);border:1px solid var(--border);
+      color:var(--muted);padding:8px 10px;border-radius:12px;font-size:12px;backdrop-filter:blur(8px);
+    }
+    .hr{height:1px;background:rgba(255,255,255,.08);margin:10px 0}
+    .hide{display:none!important}
+
+    @media (max-width:980px){
+      body{overflow:auto;height:auto}
+      .app{flex-direction:column;height:auto}
+      .left,.right{width:100%;max-width:none}
+      .right{height:55vh}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="left">
+      <header>
+        <img class="ngLogo" src="/ng-logo.png" alt="NG Nordic" />
+        <h1>Adresser med fraksjon</h1>
+        <p>
+          Login → søk adresse + fraksjon.
+          Geokoding: kun Norge.
+        </p>
+        <div>
+          <span class="pill" id="authStatus">Auth: ikke logget inn</span>
+          <span class="pill" id="roleStatus">Role: -</span>
+        </div>
+      </header>
+
+      <!-- LOGIN -->
+      <div id="loginBox" class="form">
+        <div class="row2">
+          <div>
+            <label>Email</label>
+            <input id="loginEmail" type="email" placeholder="email" />
+          </div>
+          <div>
+            <label>Password</label>
+            <input id="loginPass" type="password" placeholder="password" />
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="btnLogin" type="button">Login</button>
+        </div>
+        <div class="result">
+          <h2>Status</h2>
+          <div class="line" id="loginMsg">Prisijunk.</div>
+        </div>
+      </div>
+
+      <!-- APP -->
+      <div id="appBox" class="form hide">
+        <div class="actions">
+          <button class="secondary" id="btnLogout" type="button">Logout</button>
+          <button id="btnClear" type="button">Clear</button>
+        </div>
+
+        <!-- ADMIN UPLOAD -->
+        <div id="adminBox" class="hide">
+          <div class="hr"></div>
+          <div class="actions">
+            <button class="secondary" id="btnAdminPick" type="button">Admin: Upload Excel → DB</button>
+            <button class="danger" id="btnAdminReimport" type="button" title="Perimportuos (upsert).">Re-import</button>
+          </div>
+          <input id="adminFile" type="file" accept=".xlsx,.xlsm,.xls" class="hide" />
+          <div class="result">
+            <h2>Admin import</h2>
+            <div class="line" id="adminMsg">Tik admin mato šitą.</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="row2">
+          <div>
+            <label for="postkode">Postkode</label>
+            <input id="postkode" type="text" inputmode="numeric" placeholder="pvz. 0476" />
+          </div>
+          <div>
+            <label for="by">By (Sted)</label>
+            <input id="by" type="text" placeholder="pvz. Oslo" />
+          </div>
+        </div>
+
+        <div>
+          <label for="adresse">Adresse med hus nummer</label>
+          <input id="adresse" type="text" placeholder="pvz. Torshovgata 12" />
+        </div>
+
+        <div>
+          <label for="fraksjon">Fraksjon</label>
+          <select id="fraksjon">
+            <option value="">-- Velg fraksjon --</option>
+            <option value="MAT">Matavfall</option>
+            <option value="REST">Restavfall</option>
+            <option value="PAPP">Papp / Papir</option>
+            <option value="GLASSMET">Glass og metallembalasje</option>
+            <option value="PLAST">Plastembalasje</option>
+            <option value="FPLASTFOLIE">Farget plastfolie</option>
+            <option value="KPLASTFOLIE">Klar plastfolie</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="btnSearch" type="button">Søk + vis på kart</button>
+        </div>
+
+        <div class="result">
+          <h2>Resultat</h2>
+          <div class="line" id="resultText">Klar.</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="right">
+      <div class="mapHint">OSM-kart. Geokoding: kun Norge.</div>
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
