@@ -100,7 +100,7 @@ window.addEventListener("load", async () => {
     const pass = (el("loginPass").value || "").trim();
     if (!email || !pass) return setText("loginMsg", "Įvesk email + password.");
 
-    setText("loginMsg", "Jungiamės…");
+    setText("loginMsg", "Logger inn…");
     const { error } = await sb.auth.signInWithPassword({ email, password: pass });
     if (error) return setText("loginMsg", `Login error: ${error.message}`);
     await refreshAuthUI();
@@ -339,7 +339,7 @@ console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
           `${line}\n\n` +
           `Postkode prefix brukt: ${res.prefix3}\n` +
           `Treff i DB (prefix + fraksjon-koder): ${res.count}\n` +
-          `Kartmarkører (nerysk rød): laster…`
+          `Kartmarkører: laster…`
       );
 
       plotNearbyAddressesGrouped(res.wideRows, 5).then((pi) => {
@@ -349,7 +349,7 @@ console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
             `${line}\n\n` +
             `Postkode prefix brukt: ${res.prefix3}\n` +
             `Treff i DB (prefix + fraksjon-koder): ${res.count}\n` +
-            `Kartmarkører (nerysk rød): ${pi.plotted}/${pi.tried} vist.`
+            `Kartmarkører: ${pi.plotted}/${pi.tried} vist.`
         );
       });
     } catch (e) {
