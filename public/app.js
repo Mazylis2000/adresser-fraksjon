@@ -95,7 +95,8 @@ window.addEventListener("load", async () => {
   }
 
   // ---------- Auth actions ----------
-  el("btnLogin").addEventListener("click", async () => {
+  // ✅ viena funkcija login'ui (kad veiktų ir mygtukas, ir Enter)
+  async function doLogin() {
     const email = (el("loginEmail").value || "").trim();
     const pass = (el("loginPass").value || "").trim();
     if (!email || !pass) return setText("loginMsg", "Įvesk email + password.");
@@ -104,6 +105,19 @@ window.addEventListener("load", async () => {
     const { error } = await sb.auth.signInWithPassword({ email, password: pass });
     if (error) return setText("loginMsg", `Login error: ${error.message}`);
     await refreshAuthUI();
+  }
+
+  // Mygtukas
+  el("btnLogin").addEventListener("click", doLogin);
+
+  // ✅ Enter klavišas email/password laukuose
+  ["loginEmail", "loginPass"].forEach((id) => {
+    el(id).addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doLogin();
+      }
+    });
   });
 
   el("btnLogout").addEventListener("click", async () => {
@@ -111,28 +125,23 @@ window.addEventListener("load", async () => {
     await refreshAuthUI();
   });
 
- // ---------- Geocode (Norway only) ----------
-// NOTE: per Vercel reikia per proxy endpoint'ą /api/geocode (server-side),
-// nes tiesioginis fetch į nominatim.openstreetmap.org dažnai būna blokuojamas CORS.
-async function geocode(query) {
-  const q = `${query}, Norge`;
+  // ---------- Geocode (Norway only) ----------
+  // NOTE: per Vercel reikia per proxy endpoint'ą /api/geocode (server-side),
+  // nes tiesioginis fetch į nominatim.openstreetmap.org dažnai būna blokuojamas CORS.
+  async function geocode(query) {
+    const q = `${query}, Norge`;
 
-  const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
-  if (!res.ok) throw new Error("Geocode proxy error: " + res.status);
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+    if (!res.ok) throw new Error("Geocode proxy error: " + res.status);
 
-  const json = await res.json();
-  return json?.item ?? null;
-}
+    const json = await res.json();
+    return json?.item ?? null;
+  }
 
-
-
-
-
- function markerTooltip(addr, daysArr){
-  const days = (daysArr || []).map(dayNameNO).filter(Boolean);
-  return `<b>${addr}</b><br>Ukedag: ${days.length ? days.join(" / ") : "-"}`;
-}
-
+  function markerTooltip(addr, daysArr) {
+    const days = (daysArr || []).map(dayNameNO).filter(Boolean);
+    return `<b>${addr}</b><br>Ukedag: ${days.length ? days.join(" / ") : "-"}`;
+  }
 
   async function geocodeCached(key, query) {
     if (geoCache.has(key)) return geoCache.get(key);
@@ -214,31 +223,29 @@ async function geocode(query) {
     const codeArr = Array.from(codes);
 
     const { data, error } = await sb
-  .from("adresai")
-  .select('Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
-  .gte("Postnummer", prefix3 + "0")
-  .lte("Postnummer", prefix3 + "9")
-  .in("Avfall", codeArr)
-  .limit(5000);
-
+      .from("adresai")
+      .select('Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
+      .gte("Postnummer", prefix3 + "0")
+      .lte("Postnummer", prefix3 + "9")
+      .in("Avfall", codeArr)
+      .limit(5000);
 
     if (error) return { ok: false, message: `DB error: ${error.message}` };
 
- const wideRows = (data || []).map(r => ({
-  postnumr: String(r.Postnummer || "").trim(),
-  sted: String(r.Sted || "").trim(),
-  gate: String(r["Gate/vei"] || "").trim(),
-  husnumr: String(r.Husnummer || "").trim(),
-  avfall_code: String(r.Avfall || "").trim(),
-  ukedag: Number(r.Ukedag || 0),
-}));
+    const wideRows = (data || []).map((r) => ({
+      postnumr: String(r.Postnummer || "").trim(),
+      sted: String(r.Sted || "").trim(),
+      gate: String(r["Gate/vei"] || "").trim(),
+      husnumr: String(r.Husnummer || "").trim(),
+      avfall_code: String(r.Avfall || "").trim(),
+      ukedag: Number(r.Ukedag || 0),
+    }));
 
-const wideDays = Array.from(
-  new Set(wideRows.map(r => r.ukedag).filter(d => d >= 1 && d <= 7))
-).sort((a,b)=>a-b);
+    const wideDays = Array.from(
+      new Set(wideRows.map((r) => r.ukedag).filter((d) => d >= 1 && d <= 7))
+    ).sort((a, b) => a - b);
 
-return { ok:true, prefix3, wideRows, wideDays, count: wideRows.length };
-
+    return { ok: true, prefix3, wideRows, wideDays, count: wideRows.length };
   }
 
   function renderResult(text) {
@@ -273,47 +280,47 @@ return { ok:true, prefix3, wideRows, wideDays, count: wideRows.length };
       const lat = Number(g.lat),
         lon = Number(g.lon);
 
-     if (marker) marker.remove();
-marker = L.marker([lat, lon]).addTo(map);
-map.setView([lat, lon], 15);
+      if (marker) marker.remove();
+      marker = L.marker([lat, lon]).addTo(map);
+      map.setView([lat, lon], 15);
 
-const res = await findDaysForAreaFromDB(f);
+      const res = await findDaysForAreaFromDB(f);
 
-// --- LOG SEARCH (search_logs) - loginam VISADA (ir kai 0 / error) ---
-try {
-  const { data: { session } } = await sb.auth.getSession();
+      // --- LOG SEARCH (search_logs) - loginam VISADA (ir kai 0 / error) ---
+      try {
+        const {
+          data: { session },
+        } = await sb.auth.getSession();
 
-  const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
-  const avfall_codes = Array.from(codesSet);
+        const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
+        const avfall_codes = Array.from(codesSet);
 
-  await sb.from("search_logs").insert([{
-    user_id: session?.user?.id || null,
-    postkode: f.postkode || null,
-    sted: f.by || null,
-    adresse: f.adresse || null,
-    fraksjon: f.fraksjonGroup || null,
-    post_prefix3: cleanDigits(f.postkode).slice(0, 3) || null,
-    avfall_codes,
-    results_count: Number(res?.count || 0),
-    lat: Number.isFinite(lat) ? lat : null,
-    lon: Number.isFinite(lon) ? lon : null
-  }]);
-} catch (e) {
-  console.warn("search_logs insert failed:", e);
-}
-// --- END LOG ---
+        await sb.from("search_logs").insert([
+          {
+            user_id: session?.user?.id || null,
+            postkode: f.postkode || null,
+            sted: f.by || null,
+            adresse: f.adresse || null,
+            fraksjon: f.fraksjonGroup || null,
+            post_prefix3: cleanDigits(f.postkode).slice(0, 3) || null,
+            avfall_codes,
+            results_count: Number(res?.count || 0),
+            lat: Number.isFinite(lat) ? lat : null,
+            lon: Number.isFinite(lon) ? lon : null,
+          },
+        ]);
+      } catch (e) {
+        console.warn("search_logs insert failed:", e);
+      }
+      // --- END LOG ---
 
-if (!res.ok) {
-  return renderResult(
-    `Kart: ${g.display_name}\nKoordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n${res.message}`
-  );
-}
+      if (!res.ok) {
+        return renderResult(
+          `Kart: ${g.display_name}\nKoordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n${res.message}`
+        );
+      }
 
-
-     
-
-
-console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
+      console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
 
       const frText = (f.fraksjonLabel || "Fraksjon").trim();
       const wideNames = res.wideDays.map(dayNameNO).filter(Boolean);
