@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Adresser med fraksjon</title>
 
-  <!-- Leaflet -->
+   <!-- Leaflet -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -26,50 +26,30 @@
   <!-- Supabase JS (browser) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 
-
   <style>
-
     :root{
       --panel:#111827; --panel2:#0f172a;
       --text:#e5e7eb; --muted:#9ca3af; --border:rgba(255,255,255,.12);
       --radius:14px; --accent:#22c55e; --warn:#f59e0b;
     }
-  <style>
-/* Select (collapsed) */
-select {
-  background: rgba(255,255,255,.06);
-  color: #e5e7eb;
-  border: 1px solid rgba(255,255,255,.12);
-}
 
-/* Options (dropdown list) - veikia ne visur, bet verta */
-select option {
-  background: #0f172a;   /* tamsus fonas */
-  color: #e5e7eb;        /* šviesus tekstas */
-}
-
-/* Placeholder option (pirmas) */
-select option[value=""] {
-  color: #9ca3af;
-}
-
-    :root{
-      --panel:#111827; --panel2:#0f172a;
-      --text:#e5e7eb; --muted:#9ca3af; --border:rgba(255,255,255,.12);
-      --radius:14px; --accent:#22c55e; --warn:#f59e0b;
+    /* ---------- SELECT DROPDOWN FIX ---------- */
+    select{
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border: 1px solid var(--border);
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      background:radial-gradient(1200px 800px at 10% 10%, #111827, #0b0f14);
-      color:var(--text); height:100vh; overflow:hidden;
+    /* Dropdown list (veikia ne visur, bet dažnai padeda) */
+    select option{
+      background: #0f172a;
+      color: #e5e7eb;
     }
-    .app{display:flex;height:100vh;gap:12px;padding:12px}
-    .left{
-      width:30%;min-width:340px;max-width:560px;
-      background:linear-gradient(180deg,var(--panel),var(--panel2));
-      border:1px solid var(--border);border-radius:var(--radius);
-      padding:14px;display:flex;f
+    /* Placeholder option */
+    select option[value=""]{
+      color: #9ca3af;
+    }
+    /* ---------------------------------------- */
+
     *{box-sizing:border-box}
     body{
       margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
@@ -83,6 +63,7 @@ select option[value=""] {
       border:1px solid var(--border);border-radius:var(--radius);
       padding:14px;display:flex;flex-direction:column;overflow:hidden;
     }
+
     .right{width:70%;flex:1;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;position:relative;background:#0a0f16}
     header h1{margin:0 0 6px;font-size:18px}
     header p{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.35}
@@ -129,6 +110,7 @@ select option[value=""] {
     }
   </style>
 </head>
+
 
 <body>
   <div class="app">
