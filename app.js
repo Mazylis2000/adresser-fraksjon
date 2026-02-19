@@ -214,11 +214,13 @@ window.addEventListener("load", async () => {
     const codeArr = Array.from(codes);
 
     const { data, error } = await sb
-      .from("adresai")
-      .select("postnumr, sted, gate, husnumr, avfall_code, ukedag")
-      .eq("post_prefix3", prefix3)
-      .in("avfall_code", codeArr)
-      .limit(5000);
+  .from("adresai")
+  .select('Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
+  .gte("Postnummer", prefix3 + "0")
+  .lte("Postnummer", prefix3 + "9")
+  .in("Avfall", codeArr)
+  .limit(5000);
+
 
     if (error) return { ok: false, message: `DB error: ${error.message}` };
 
