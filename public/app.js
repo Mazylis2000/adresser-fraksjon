@@ -256,70 +256,82 @@ window.__ADDR__ = data || [];
   }
 
   function renderResult(text) {
-    setText("resultText", text);
+  setText("resultText", text);
+}
+
+el("btnClear").addEventListener("click", () => {
+  el("postkode").value = "";
+  el("by").value = "";
+  el("adresse").value = "";
+  el("fraksjon").value = "";
+  if (marker) {
+    marker.remove();
+    marker = null;
   }
+  nearbyLayer.clearLayers();
+  map.setView([59.9139, 10.7522], 12);
+  renderResult("Klar.");
+});
 
-  el("btnClear").addEventListener("click", () => {
-    el("postkode").value = "";
-    el("by").value = "";
-    el("adresse").value = "";
-    el("fraksjon").value = "";
-    if (marker) {
-      marker.remove();
-      marker = null;
-    }
-    nearbyLayer.clearLayers();
-    map.setView([59.9139, 10.7522], 12);
-    renderResult("Klar.");
-  });
+el("btnSearch").addEventListener("click", async () => {
+  const f = readForm();
 
-  el("btnSearch").addEventListener("click", async () => {
-    const f = readForm();
-    const query = [f.adresse, f.postkode, f.by].filter(Boolean).join(", ");
-    if (!query) return renderResult("Skriv minst adresse (og helst postkode + sted).");
+  // --- Variant A: normaliser postkode til 4 siffer hvis den er oppgitt ---
+  const post4 = cleanDigits(f.postkode).padStart(4, "0");
+  const hasPost = post4.length === 4 && post4 !== "0000";
 
-    renderResult("Geokoder adresse…");
+  // Bygg geocode query som fungerer også når man kun skriver postkode
+  const query = [f.adresse, hasPost ? post4 : null, f.by].filter(Boolean).join(", ");
+  if (!query) return renderResult("Skriv minst postkode eller adresse.");
 
+  renderResult("Geokoder adresse…");
+
+  try {
+    const g = await geocode(query);
+    if (!g) return renderResult("Adressen ble ikke funnet i geokoder.");
+
+    const lat = Number(g.lat),
+      lon = Number(g.lon);
+
+    if (marker) marker.remove();
+    marker = L.marker([lat, lon]).addTo(map);
+    map.setView([lat, lon], 15);
+
+    // Viktig: send normalisert postkode videre (så DB-søk matcher postnummer_txt)
+    const res = await findDaysForAreaFromDB({ ...f, postkode: hasPost ? post4 : f.postkode });
+
+    // --- LOG SEARCH (search_logs) - loginam VISADA (ir kai 0 / error) ---
     try {
-      const g = await geocode(query);
-      if (!g) return renderResult("Adressen ble ikke funnet i geokoder.");
+      const {
+        data: { session },
+      } = await sb.auth.getSession();
 
-      const lat = Number(g.lat),
-        lon = Number(g.lon);
+      const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
+      const avfall_codes = Array.from(codesSet);
 
-      if (marker) marker.remove();
-      marker = L.marker([lat, lon]).addTo(map);
-      map.setView([lat, lon], 15);
-
-      const res = await findDaysForAreaFromDB(f);
-
-      // --- LOG SEARCH (search_logs) - loginam VISADA (ir kai 0 / error) ---
-      try {
-        const {
-          data: { session },
-        } = await sb.auth.getSession();
-
-        const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
-        const avfall_codes = Array.from(codesSet);
-
-        await sb.from("search_logs").insert([
-          {
-            user_id: session?.user?.id || null,
-            postkode: f.postkode || null,
-            sted: f.by || null,
-            adresse: f.adresse || null,
-            fraksjon: f.fraksjonGroup || null,
-            post_prefix3: cleanDigits(f.postkode).slice(0, 3) || null,
-            avfall_codes,
-            results_count: Number(res?.count || 0),
-            lat: Number.isFinite(lat) ? lat : null,
-            lon: Number.isFinite(lon) ? lon : null,
-          },
-        ]);
-      } catch (e) {
-        console.warn("search_logs insert failed:", e);
-      }
-      // --- END LOG ---
+      await sb.from("search_logs").insert([
+        {
+          user_id: session?.user?.id || null,
+          postkode: hasPost ? post4 : (f.postkode || null),
+          sted: f.by || null,
+          adresse: f.adresse || null,
+          fraksjon: f.fraksjonGroup || null,
+          post_prefix3: hasPost ? post4.slice(0, 3) : (cleanDigits(f.postkode).slice(0, 3) || null),
+          avfall_codes,
+          results_count: Number(res?.count || 0),
+          lat: Number.isFinite(lat) ? lat : null,
+          lon: Number.isFinite(lon) ? lon : null,
+        },
+      ]);
+    } catch (e) {
+      console.warn("search_logs insert failed:", e);
+    }
+    // --- END LOG ---
+  } catch (e) {
+    console.error(e);
+    renderResult("Feil: " + (e?.message || e));
+  }
+});
 
       if (!res.ok) {
         return renderResult(
