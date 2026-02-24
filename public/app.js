@@ -126,30 +126,30 @@ window.addEventListener("load", async () => {
   });
 
   // ---------- Geocode (Norway only) ----------
-let activeGeocodeCtrl = null;
+  let activeGeocodeCtrl = null;
 
-async function geocode(query) {
-  const q = `${query}, Norge`;
+  async function geocode(query) {
+    const q = `${query}, Norge`;
 
-  // nutrauk seną geocode, jei dar vyksta
-  if (activeGeocodeCtrl) activeGeocodeCtrl.abort();
+    // nutrauk seną geocode, jei dar vyksta
+    if (activeGeocodeCtrl) activeGeocodeCtrl.abort();
 
-  const ctrl = new AbortController();
-  activeGeocodeCtrl = ctrl;
+    const ctrl = new AbortController();
+    activeGeocodeCtrl = ctrl;
 
-  const t = setTimeout(() => ctrl.abort(), 12000); // 12s timeout
+    const t = setTimeout(() => ctrl.abort(), 12000); // 12s timeout
 
-  try {
-    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
-    if (!res.ok) throw new Error("Geocode proxy error: " + res.status);
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+      if (!res.ok) throw new Error("Geocode proxy error: " + res.status);
 
-    const json = await res.json();
-    return json?.item ?? null;
-  } finally {
-    clearTimeout(t);
-    if (activeGeocodeCtrl === ctrl) activeGeocodeCtrl = null;
+      const json = await res.json();
+      return json?.item ?? null;
+    } finally {
+      clearTimeout(t);
+      if (activeGeocodeCtrl === ctrl) activeGeocodeCtrl = null;
+    }
   }
-}
 
   function markerTooltip(addr, daysArr) {
     const days = (daysArr || []).map(dayNameNO).filter(Boolean);
@@ -220,7 +220,8 @@ async function geocode(query) {
     };
   }
 
-  // Variant A: søker kun eksakt postkode (4 siffer) + avfall-koder
+  // Variant A: eksakt postkode (4 siffer) + avfall-koder
+  // + fallback: hvis ingen treff i post4, søk i nærliggende postkoder (±RANGE) og velg nærmeste som har treff
   async function findDaysForAreaFromDB(input) {
     if (!input.fraksjonGroup) return { ok: false, message: "Velg fraksjon først." };
 
@@ -229,25 +230,64 @@ async function geocode(query) {
       return { ok: false, message: "Postkode må være 4 siffer (f.eks. 0372)." };
     }
 
-    const prefix3 = post4.slice(0, 3);
-
     const codes = FRAKSJON_CODES[input.fraksjonGroup];
     if (!codes || codes.size === 0) {
       return { ok: false, message: "Ingen fraksjon-koder satt i FRAKSJON_CODES." };
     }
     const codeArr = Array.from(codes);
 
+    const baseNum = parseInt(post4, 10);
+    const RANGE = 25;
+
+    const candidates = [];
+    candidates.push(post4);
+    for (let d = 1; d <= RANGE; d++) {
+      const a = baseNum - d;
+      const b = baseNum + d;
+      if (a >= 0) candidates.push(String(a).padStart(4, "0"));
+      if (b <= 9999) candidates.push(String(b).padStart(4, "0"));
+    }
+
     const { data, error } = await sb
       .from("adresai")
       .select('postnummer_txt, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
-      .eq("postnummer_txt", post4)
+      .in("postnummer_txt", candidates)
       .in("Avfall", codeArr)
       .limit(5000);
 
     if (error) return { ok: false, message: `DB error: ${error.message}` };
+    if (!data || data.length === 0) {
+      return {
+        ok: false,
+        message: `Ingen treff for ${post4} (eller nærliggende postkoder) med valgt fraksjon.`,
+      };
+    }
 
-    const wideRows = (data || []).map((r) => ({
-      postnumr: String(r.postnummer_txt || "").trim(), // <-- 4 siffer fra tekstkolonnen
+    // velg nærmeste postkode som faktisk har treff
+    const countsByPost = new Map(); // post -> count
+    for (const r of data) {
+      const p = String(r.postnummer_txt || "").trim();
+      if (!p) continue;
+      countsByPost.set(p, (countsByPost.get(p) || 0) + 1);
+    }
+
+    let bestPost = null;
+    let bestDist = Infinity;
+    for (const p of countsByPost.keys()) {
+      const dist = Math.abs(parseInt(p, 10) - baseNum);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestPost = p;
+      }
+    }
+
+    const usedPost = bestPost || post4;
+    const usedIsFallback = usedPost !== post4;
+
+    const dataBest = data.filter((r) => String(r.postnummer_txt || "").trim() === usedPost);
+
+    const wideRows = (dataBest || []).map((r) => ({
+      postnumr: String(r.postnummer_txt || "").trim(),
       sted: String(r.Sted || "").trim(),
       gate: String(r["Gate/vei"] || "").trim(),
       husnumr: String(r.Husnummer || "").trim(),
@@ -259,15 +299,24 @@ async function geocode(query) {
       new Set(wideRows.map((r) => r.ukedag).filter((d) => d >= 1 && d <= 7))
     ).sort((a, b) => a - b);
 
-    return { ok: true, prefix3, post4, wideRows, wideDays, count: wideRows.length };
+    return {
+      ok: true,
+      prefix3: usedPost.slice(0, 3),
+      post4: usedPost,
+      isFallback: usedIsFallback,
+      wideRows,
+      wideDays,
+      count: wideRows.length,
+    };
   }
 
   // ---------- Buttons ----------
   el("btnClear").addEventListener("click", () => {
-if (activeGeocodeCtrl) {
-  activeGeocodeCtrl.abort();
-  activeGeocodeCtrl = null;
-}
+    if (activeGeocodeCtrl) {
+      activeGeocodeCtrl.abort();
+      activeGeocodeCtrl = null;
+    }
+
     el("postkode").value = "";
     el("by").value = "";
     el("adresse").value = "";
@@ -318,11 +367,11 @@ if (activeGeocodeCtrl) {
         await sb.from("search_logs").insert([
           {
             user_id: session?.user?.id || null,
-            postkode: hasPost ? post4 : (f.postkode || null),
+            postkode: hasPost ? post4 : f.postkode || null,
             sted: f.by || null,
             adresse: f.adresse || null,
             fraksjon: f.fraksjonGroup || null,
-            post_prefix3: hasPost ? post4.slice(0, 3) : (cleanDigits(f.postkode).slice(0, 3) || null),
+            post_prefix3: hasPost ? post4.slice(0, 3) : cleanDigits(f.postkode).slice(0, 3) || null,
             avfall_codes,
             results_count: Number(res?.count || 0),
             lat: Number.isFinite(lat) ? lat : null,
@@ -340,10 +389,13 @@ if (activeGeocodeCtrl) {
         );
       }
 
-      console.log("DB count:", res.count, "sample:", res.wideRows?.[0]);
-
       const frText = (f.fraksjonLabel || "Fraksjon").trim();
       const wideNames = res.wideDays.map(dayNameNO).filter(Boolean);
+
+      const note = res.isFallback
+        ? `NB: Ingen treff i ${post4}. Viser nærmeste postkode med fraksjon: ${res.post4}\n\n`
+        : "";
+
       const line = wideNames.length
         ? `${frText} i området kan tømmes ${wideNames.join(" / ")}`
         : `${frText} i området: ingen ukedager funnet (sjekk koder/DB).`;
@@ -351,6 +403,7 @@ if (activeGeocodeCtrl) {
       renderResult(
         `Kart: ${g.display_name}\n` +
           `Koordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n` +
+          note +
           `${line}\n\n` +
           `Postkode brukt: ${res.post4}\n` +
           `Treff i DB (postkode + fraksjon-koder): ${res.count}\n` +
@@ -361,6 +414,7 @@ if (activeGeocodeCtrl) {
         renderResult(
           `Kart: ${g.display_name}\n` +
             `Koordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n` +
+            note +
             `${line}\n\n` +
             `Postkode brukt: ${res.post4}\n` +
             `Treff i DB (postkode + fraksjon-koder): ${res.count}\n` +
