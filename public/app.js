@@ -222,19 +222,20 @@ window.addEventListener("load", async () => {
 
     const codeArr = Array.from(codes);
 
-console.log("FETCH START prefix3:", prefix3, "codeArr:", codeArr);
+const post4 = String(inputPostnummer).trim().padStart(4, "0"); // pvz "0372"
+console.log("FETCH START post4:", post4, "codeArr:", codeArr);
 
-    const { data, error } = await sb
-      .from("adresai")
-      .select('postnummer_txt, Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
-      .gte("postnummer_txt", prefix3 + "0")
-      .lte("postnummer_txt", prefix3 + "9")
-      .in("Avfall", codeArr)
-      .limit(5000);
+const { data, error } = await sb
+  .from("adresai")
+  .select('postnummer_txt, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
+  .eq("postnummer_txt", post4)
+  .in("Avfall", codeArr)
+  .limit(5000);
 
-console.log("ADDR fetch error:", error);
-console.log("ADDR loaded:", data?.length, data?.[0]);
-window.__ADDR__ = data;
+if (error) console.error("ADDR fetch error:", error);
+else console.log("ADDR loaded:", data?.length, data?.[0]);
+
+window.__ADDR__ = data || [];
 
     if (error) return { ok: false, message: `DB error: ${error.message}` };
 
