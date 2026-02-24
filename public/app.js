@@ -222,13 +222,13 @@ window.addEventListener("load", async () => {
 
     const codeArr = Array.from(codes);
 
-    console.log("FETCH START prefix3:", prefix3, "codeArr:", codeArr);
+console.log("FETCH START prefix3:", prefix3, "codeArr:", codeArr);
 
     const { data, error } = await sb
       .from("adresai")
-      .select('Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
-      .gte("Postnummer", prefix3 + "0")
-      .lte("Postnummer", prefix3 + "9")
+      .select('postnummer_txt, Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
+      .gte("postnummer_txt", prefix3 + "0")
+      .lte("postnummer_txt", prefix3 + "9")
       .in("Avfall", codeArr)
       .limit(5000);
 
@@ -467,4 +467,3 @@ window.__ADDR__ = data;
     await refreshAuthUI();
   });
 });
-
