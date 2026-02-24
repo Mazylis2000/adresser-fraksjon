@@ -230,6 +230,10 @@ window.addEventListener("load", async () => {
       .in("Avfall", codeArr)
       .limit(5000);
 
+console.log("ADDR fetch error:", error);
+console.log("ADDR loaded:", data?.length, data?.[0]);
+window.__ADDR__ = data;
+
     if (error) return { ok: false, message: `DB error: ${error.message}` };
 
     const wideRows = (data || []).map((r) => ({
@@ -402,6 +406,8 @@ window.addEventListener("load", async () => {
     }
 
     return out;
+
+92445170 
   }
 
   async function adminImportExcel(file) {
