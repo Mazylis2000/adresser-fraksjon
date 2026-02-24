@@ -52,6 +52,9 @@ window.addEventListener("load", async () => {
   function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
+  function renderResult(text) {
+    setText("resultText", text);
+  }
 
   function showLogin(msg) {
     el("loginBox").classList.remove("hide");
@@ -95,7 +98,6 @@ window.addEventListener("load", async () => {
   }
 
   // ---------- Auth actions ----------
-  // ✅ viena funkcija login'ui (kad veiktų ir mygtukas, ir Enter)
   async function doLogin() {
     const email = (el("loginEmail").value || "").trim();
     const pass = (el("loginPass").value || "").trim();
@@ -107,10 +109,8 @@ window.addEventListener("load", async () => {
     await refreshAuthUI();
   }
 
-  // Mygtukas
   el("btnLogin").addEventListener("click", doLogin);
 
-  // ✅ Enter klavišas email/password laukuose
   ["loginEmail", "loginPass"].forEach((id) => {
     el(id).addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
@@ -126,8 +126,6 @@ window.addEventListener("load", async () => {
   });
 
   // ---------- Geocode (Norway only) ----------
-  // NOTE: per Vercel reikia per proxy endpoint'ą /api/geocode (server-side),
-  // nes tiesioginis fetch į nominatim.openstreetmap.org dažnai būna blokuojamas CORS.
   async function geocode(query) {
     const q = `${query}, Norge`;
 
@@ -207,40 +205,34 @@ window.addEventListener("load", async () => {
     };
   }
 
+  // Variant A: søker kun eksakt postkode (4 siffer) + avfall-koder
   async function findDaysForAreaFromDB(input) {
     if (!input.fraksjonGroup) return { ok: false, message: "Velg fraksjon først." };
 
-    const prefix3 = cleanDigits(input.postkode).slice(0, 3);
-    if (prefix3.length < 3) {
-      return { ok: false, message: "Postkode må ha minst 3 siffer (prefix)." };
+    const post4 = cleanDigits(input.postkode).padStart(4, "0").slice(0, 4);
+    if (post4.length !== 4 || post4 === "0000") {
+      return { ok: false, message: "Postkode må være 4 siffer (f.eks. 0372)." };
     }
+
+    const prefix3 = post4.slice(0, 3);
 
     const codes = FRAKSJON_CODES[input.fraksjonGroup];
     if (!codes || codes.size === 0) {
       return { ok: false, message: "Ingen fraksjon-koder satt i FRAKSJON_CODES." };
     }
-
     const codeArr = Array.from(codes);
 
-const post4 = String(inputPostnummer).trim().padStart(4, "0"); // pvz "0372"
-console.log("FETCH START post4:", post4, "codeArr:", codeArr);
-
-const { data, error } = await sb
-  .from("adresai")
-  .select('postnummer_txt, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
-  .eq("postnummer_txt", post4)
-  .in("Avfall", codeArr)
-  .limit(5000);
-
-if (error) console.error("ADDR fetch error:", error);
-else console.log("ADDR loaded:", data?.length, data?.[0]);
-
-window.__ADDR__ = data || [];
+    const { data, error } = await sb
+      .from("adresai")
+      .select('postnummer_txt, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
+      .eq("postnummer_txt", post4)
+      .in("Avfall", codeArr)
+      .limit(5000);
 
     if (error) return { ok: false, message: `DB error: ${error.message}` };
 
     const wideRows = (data || []).map((r) => ({
-      postnumr: String(r.Postnummer || "").trim(),
+      postnumr: String(r.postnummer_txt || "").trim(), // <-- 4 siffer fra tekstkolonnen
       sted: String(r.Sted || "").trim(),
       gate: String(r["Gate/vei"] || "").trim(),
       husnumr: String(r.Husnummer || "").trim(),
@@ -252,86 +244,76 @@ window.__ADDR__ = data || [];
       new Set(wideRows.map((r) => r.ukedag).filter((d) => d >= 1 && d <= 7))
     ).sort((a, b) => a - b);
 
-    return { ok: true, prefix3, wideRows, wideDays, count: wideRows.length };
+    return { ok: true, prefix3, post4, wideRows, wideDays, count: wideRows.length };
   }
 
-  function renderResult(text) {
-  setText("resultText", text);
-}
-
-el("btnClear").addEventListener("click", () => {
-  el("postkode").value = "";
-  el("by").value = "";
-  el("adresse").value = "";
-  el("fraksjon").value = "";
-  if (marker) {
-    marker.remove();
-    marker = null;
-  }
-  nearbyLayer.clearLayers();
-  map.setView([59.9139, 10.7522], 12);
-  renderResult("Klar.");
-});
-
-el("btnSearch").addEventListener("click", async () => {
-  const f = readForm();
-
-  // --- Variant A: normaliser postkode til 4 siffer hvis den er oppgitt ---
-  const post4 = cleanDigits(f.postkode).padStart(4, "0");
-  const hasPost = post4.length === 4 && post4 !== "0000";
-
-  // Bygg geocode query som fungerer også når man kun skriver postkode
-  const query = [f.adresse, hasPost ? post4 : null, f.by].filter(Boolean).join(", ");
-  if (!query) return renderResult("Skriv minst postkode eller adresse.");
-
-  renderResult("Geokoder adresse…");
-
-  try {
-    const g = await geocode(query);
-    if (!g) return renderResult("Adressen ble ikke funnet i geokoder.");
-
-    const lat = Number(g.lat),
-      lon = Number(g.lon);
-
-    if (marker) marker.remove();
-    marker = L.marker([lat, lon]).addTo(map);
-    map.setView([lat, lon], 15);
-
-    // Viktig: send normalisert postkode videre (så DB-søk matcher postnummer_txt)
-    const res = await findDaysForAreaFromDB({ ...f, postkode: hasPost ? post4 : f.postkode });
-
-    // --- LOG SEARCH (search_logs) - loginam VISADA (ir kai 0 / error) ---
-    try {
-      const {
-        data: { session },
-      } = await sb.auth.getSession();
-
-      const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
-      const avfall_codes = Array.from(codesSet);
-
-      await sb.from("search_logs").insert([
-        {
-          user_id: session?.user?.id || null,
-          postkode: hasPost ? post4 : (f.postkode || null),
-          sted: f.by || null,
-          adresse: f.adresse || null,
-          fraksjon: f.fraksjonGroup || null,
-          post_prefix3: hasPost ? post4.slice(0, 3) : (cleanDigits(f.postkode).slice(0, 3) || null),
-          avfall_codes,
-          results_count: Number(res?.count || 0),
-          lat: Number.isFinite(lat) ? lat : null,
-          lon: Number.isFinite(lon) ? lon : null,
-        },
-      ]);
-    } catch (e) {
-      console.warn("search_logs insert failed:", e);
+  // ---------- Buttons ----------
+  el("btnClear").addEventListener("click", () => {
+    el("postkode").value = "";
+    el("by").value = "";
+    el("adresse").value = "";
+    el("fraksjon").value = "";
+    if (marker) {
+      marker.remove();
+      marker = null;
     }
-    // --- END LOG ---
-  } catch (e) {
-    console.error(e);
-    renderResult("Feil: " + (e?.message || e));
-  }
-});
+    nearbyLayer.clearLayers();
+    map.setView([59.9139, 10.7522], 12);
+    renderResult("Klar.");
+  });
+
+  el("btnSearch").addEventListener("click", async () => {
+    const f = readForm();
+
+    const post4 = cleanDigits(f.postkode).padStart(4, "0").slice(0, 4);
+    const hasPost = post4.length === 4 && post4 !== "0000";
+
+    // geocode query (fungerer også når man kun skriver postkode)
+    const query = [f.adresse, hasPost ? post4 : null, f.by].filter(Boolean).join(", ");
+    if (!query) return renderResult("Skriv minst postkode eller adresse.");
+
+    renderResult("Geokoder adresse…");
+
+    try {
+      const g = await geocode(query);
+      if (!g) return renderResult("Adressen ble ikke funnet i geokoder.");
+
+      const lat = Number(g.lat),
+        lon = Number(g.lon);
+
+      if (marker) marker.remove();
+      marker = L.marker([lat, lon]).addTo(map);
+      map.setView([lat, lon], 15);
+
+      const res = await findDaysForAreaFromDB({ ...f, postkode: hasPost ? post4 : f.postkode });
+
+      // --- LOG SEARCH (search_logs) ---
+      try {
+        const {
+          data: { session },
+        } = await sb.auth.getSession();
+
+        const codesSet = FRAKSJON_CODES[f.fraksjonGroup] || new Set();
+        const avfall_codes = Array.from(codesSet);
+
+        await sb.from("search_logs").insert([
+          {
+            user_id: session?.user?.id || null,
+            postkode: hasPost ? post4 : (f.postkode || null),
+            sted: f.by || null,
+            adresse: f.adresse || null,
+            fraksjon: f.fraksjonGroup || null,
+            post_prefix3: hasPost ? post4.slice(0, 3) : (cleanDigits(f.postkode).slice(0, 3) || null),
+            avfall_codes,
+            results_count: Number(res?.count || 0),
+            lat: Number.isFinite(lat) ? lat : null,
+            lon: Number.isFinite(lon) ? lon : null,
+          },
+        ]);
+      } catch (e) {
+        console.warn("search_logs insert failed:", e);
+      }
+      // --- END LOG ---
 
       if (!res.ok) {
         return renderResult(
@@ -351,8 +333,8 @@ el("btnSearch").addEventListener("click", async () => {
         `Kart: ${g.display_name}\n` +
           `Koordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n` +
           `${line}\n\n` +
-          `Postkode prefix brukt: ${res.prefix3}\n` +
-          `Treff i DB (prefix + fraksjon-koder): ${res.count}\n` +
+          `Postkode brukt: ${res.post4}\n` +
+          `Treff i DB (postkode + fraksjon-koder): ${res.count}\n` +
           `Kartmarkører: laster…`
       );
 
@@ -361,13 +343,14 @@ el("btnSearch").addEventListener("click", async () => {
           `Kart: ${g.display_name}\n` +
             `Koordinater: ${lat.toFixed(5)}, ${lon.toFixed(5)}\n\n` +
             `${line}\n\n` +
-            `Postkode prefix brukt: ${res.prefix3}\n` +
-            `Treff i DB (prefix + fraksjon-koder): ${res.count}\n` +
+            `Postkode brukt: ${res.post4}\n` +
+            `Treff i DB (postkode + fraksjon-koder): ${res.count}\n` +
             `Kartmarkører: ${pi.plotted}/${pi.tried} vist.`
         );
       });
     } catch (e) {
-      renderResult("Feil:\n" + String(e));
+      console.error(e);
+      renderResult("Feil:\n" + String(e?.message || e));
     }
   });
 
