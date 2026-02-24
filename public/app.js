@@ -126,15 +126,30 @@ window.addEventListener("load", async () => {
   });
 
   // ---------- Geocode (Norway only) ----------
-  async function geocode(query) {
-    const q = `${query}, Norge`;
+let activeGeocodeCtrl = null;
 
-    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+async function geocode(query) {
+  const q = `${query}, Norge`;
+
+  // nutrauk seną geocode, jei dar vyksta
+  if (activeGeocodeCtrl) activeGeocodeCtrl.abort();
+
+  const ctrl = new AbortController();
+  activeGeocodeCtrl = ctrl;
+
+  const t = setTimeout(() => ctrl.abort(), 12000); // 12s timeout
+
+  try {
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
     if (!res.ok) throw new Error("Geocode proxy error: " + res.status);
 
     const json = await res.json();
     return json?.item ?? null;
+  } finally {
+    clearTimeout(t);
+    if (activeGeocodeCtrl === ctrl) activeGeocodeCtrl = null;
   }
+}
 
   function markerTooltip(addr, daysArr) {
     const days = (daysArr || []).map(dayNameNO).filter(Boolean);
@@ -249,6 +264,10 @@ window.addEventListener("load", async () => {
 
   // ---------- Buttons ----------
   el("btnClear").addEventListener("click", () => {
+if (activeGeocodeCtrl) {
+  activeGeocodeCtrl.abort();
+  activeGeocodeCtrl = null;
+}
     el("postkode").value = "";
     el("by").value = "";
     el("adresse").value = "";
