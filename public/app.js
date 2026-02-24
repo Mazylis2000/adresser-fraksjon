@@ -222,6 +222,8 @@ window.addEventListener("load", async () => {
 
     const codeArr = Array.from(codes);
 
+    console.log("FETCH START prefix3:", prefix3, "codeArr:", codeArr);
+
     const { data, error } = await sb
       .from("adresai")
       .select('Postnummer, Sted, "Gate/vei", Husnummer, Avfall, Ukedag')
@@ -465,3 +467,4 @@ window.__ADDR__ = data;
     await refreshAuthUI();
   });
 });
+
