@@ -421,8 +421,6 @@ el("btnSearch").addEventListener("click", async () => {
     }
 
     return out;
-
-92445170 
   }
 
   async function adminImportExcel(file) {
