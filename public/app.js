@@ -121,40 +121,40 @@ async function refreshAuthUI() {
   });
 
 el("btnLogout").addEventListener("click", async () => {
-  // 0) iškart perjunk UI į login (kad vartotojui būtų aišku)
+  // Iškart perjunk UI
   setText("authStatus", "Auth: ikke logget inn");
   setText("roleStatus", "Role: -");
   el("adminBox").classList.add("hide");
   showLogin("Logget ut.");
 
-  // 1) bandom normalų logout
+  // Bandome logout
   try {
     await sb.auth.signOut({ scope: "global" });
   } catch (e) {
     console.warn("signOut failed (ignored):", e);
   }
 
-  // 2) brutaliai išvalom visus supabase-related keys (v2 ir senesnius)
+  // Išvalom supabase storage
   const ref = "dvwatiyiwpsrtdkbwkhj";
-
   try {
     for (const k of Object.keys(localStorage)) {
-      if (k.includes(`sb-${ref}`) || k.toLowerCase().includes("supabase")) {
-        localStorage.removeItem(k);
-      }
+      if (k.includes(`sb-${ref}`) || k.toLowerCase().includes("supabase")) localStorage.removeItem(k);
     }
   } catch (_) {}
-
   try {
     for (const k of Object.keys(sessionStorage)) {
-      if (k.includes(`sb-${ref}`) || k.toLowerCase().includes("supabase")) {
-        sessionStorage.removeItem(k);
-      }
+      if (k.includes(`sb-${ref}`) || k.toLowerCase().includes("supabase")) sessionStorage.removeItem(k);
     }
   } catch (_) {}
 
-  // 3) kietas reload į tą patį puslapį
-  location.href = location.origin + location.pathname;
+  // ✅ priverstinis perkrovimas (patikimiausia su timeout)
+  setTimeout(() => {
+    try {
+      window.location.assign(window.location.origin + window.location.pathname);
+    } catch (_) {
+      window.location.reload();
+    }
+  }, 50);
 });
 
   // ---------- Geocode (Norway only) ----------
