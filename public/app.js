@@ -121,9 +121,17 @@ window.addEventListener("load", async () => {
   });
 
   el("btnLogout").addEventListener("click", async () => {
-    await sb.auth.signOut();
+  try {
+    console.log("LOGOUT: start");
+    const { error } = await sb.auth.signOut();
+    console.log("LOGOUT: done", error ? error.message : "OK");
+  } catch (e) {
+    console.error("LOGOUT: exception", e);
+  } finally {
     await refreshAuthUI();
-  });
+    console.log("LOGOUT: UI refreshed");
+  }
+});
 
   // ---------- Geocode (Norway only) ----------
   let activeGeocodeCtrl = null;
