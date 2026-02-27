@@ -99,26 +99,37 @@ async function refreshAuthUI() {
 
   // ---------- Auth actions ----------
   async function doLogin() {
-    const email = (el("loginEmail").value || "").trim();
-    const pass = (el("loginPass").value || "").trim();
-    if (!email || !pass) return setText("loginMsg", "Įvesk email + password.");
+  const email = (el("loginEmail").value || "").trim();
+  const pass = (el("loginPass").value || "").trim();
+  if (!email || !pass) return setText("loginMsg", "Įvesk email + password.");
 
-    setText("loginMsg", "Logger inn…");
-    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+  setText("loginMsg", "Logger inn…");
+
+  // 12s timeout
+  let timedOut = false;
+  const t = setTimeout(() => {
+    timedOut = true;
+    setText("loginMsg", "Login timeout (12s). Prøv igjen.");
+  }, 12000);
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (timedOut) return; // jei jau parodė timeout, nebeperrašom
+
+    clearTimeout(t);
+
     if (error) return setText("loginMsg", `Login error: ${error.message}`);
+
+    // papildomas check
+    if (!data?.session) return setText("loginMsg", "Login feilet: ingen session.");
+
     await refreshAuthUI();
+  } catch (e) {
+    clearTimeout(t);
+    if (timedOut) return;
+    setText("loginMsg", `Login exception: ${e?.message || String(e)}`);
   }
-
-  el("btnLogin").addEventListener("click", doLogin);
-
-  ["loginEmail", "loginPass"].forEach((id) => {
-    el(id).addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        doLogin();
-      }
-    });
-  });
+}
 
 el("btnLogout").addEventListener("click", async () => {
   // Iškart perjunk UI
