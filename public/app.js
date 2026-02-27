@@ -66,36 +66,36 @@ window.addEventListener("load", async () => {
     el("appBox").classList.remove("hide");
   }
 
-  async function refreshAuthUI() {
-    const {
-      data: { session },
-    } = await sb.auth.getSession();
+async function refreshAuthUI() {
+  const {
+    data: { session },
+  } = await sb.auth.getSession();
 
-    if (!session) {
-      setText("authStatus", "Auth: ikke logget inn");
-      setText("roleStatus", "Role: -");
-      el("adminBox").classList.add("hide");
-      showLogin();
-      return;
-    }
-
-    setText("authStatus", `Auth: ${session.user.email}`);
-
-    // fetch role
-    const { data: prof, error: perr } = await sb
-      .from("profiles")
-      .select("role")
-      .eq("user_id", session.user.id)
-      .single();
-
-    const role = perr ? "user" : prof?.role || "user";
-    setText("roleStatus", `Role: ${role}`);
-
-    if (role === "admin") el("adminBox").classList.remove("hide");
-    else el("adminBox").classList.add("hide");
-
-    showApp();
+  if (!session) {
+    setText("authStatus", "Auth: ikke logget inn");
+    setText("roleStatus", "Role: -");
+    el("adminBox").classList.add("hide");
+    showLogin();
+    return;
   }
+
+  setText("authStatus", `Auth: ${session.user.email}`);
+
+  const { data: prof, error: perr } = await sb
+    .from("profiles")
+    .select("role")
+    .eq("user_id", session.user.id)
+    .single();
+
+  const role = perr ? "user" : prof?.role || "user";
+  setText("roleStatus", `Role: ${role}`);
+
+  if (role === "admin") el("adminBox").classList.remove("hide");
+  else el("adminBox").classList.add("hide");
+
+  showApp();
+} // ✅ čia baigiasi refreshAuthUI()
+
 
   // ---------- Auth actions ----------
   async function doLogin() {
