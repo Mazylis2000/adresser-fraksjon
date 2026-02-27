@@ -120,34 +120,30 @@ async function refreshAuthUI() {
     });
   });
 
-  el("btnLogout").addEventListener("click", async () => {
-  // 1) Patikrinimui – jei nematai šito, click visai neateina
+el("btnLogout").addEventListener("click", async () => {
   alert("Logout clicked");
 
   try {
-    // 2) Bandome normalų signOut
-    await sb.auth.signOut({ scope: "local" });
+    await sb.auth.signOut({ scope: "global" });
   } catch (e) {
     console.warn("signOut failed (ignored):", e);
   }
 
-  // 3) BRUTALUS VALYMAS: išvalom supabase tokeną (project ref iš tavo URL)
+  // brutaliai išvalom tokenus
   const ref = "dvwatiyiwpsrtdkbwkhj";
-  const key = `sb-${ref}-auth-token`;
-
-  try { localStorage.removeItem(key); } catch (_) {}
-  try { sessionStorage.removeItem(key); } catch (_) {}
-
-  // kartais supabase pasideda dar variantų – pravalom visus raktus su ref
   try {
     for (const k of Object.keys(localStorage)) {
       if (k.includes(`sb-${ref}`)) localStorage.removeItem(k);
     }
   } catch (_) {}
+  try {
+    for (const k of Object.keys(sessionStorage)) {
+      if (k.includes(`sb-${ref}`)) sessionStorage.removeItem(k);
+    }
+  } catch (_) {}
 
-  // 4) UI į login būseną + reload (kad tikrai nebūtų cache)
-  await refreshAuthUI();
-  location.reload();
+  // ir iškart perkraunam (be refreshAuthUI)
+  location.href = location.origin + location.pathname;
 });
 
   // ---------- Geocode (Norway only) ----------
