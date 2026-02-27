@@ -121,27 +121,33 @@ async function refreshAuthUI() {
   });
 
   el("btnLogout").addEventListener("click", async () => {
-  console.log("LOGOUT: clicked");
-
-  // kad mygtukas nebutu spaudomas 10 kartu
-  el("btnLogout").disabled = true;
+  // 1) Patikrinimui – jei nematai šito, click visai neateina
+  alert("Logout clicked");
 
   try {
-    // ✅ patikimiausia: local signout (be network/global)
-    const { error } = await sb.auth.signOut({ scope: "local" });
-    console.log("LOGOUT: signOut(local)", error ? error.message : "OK");
+    // 2) Bandome normalų signOut
+    await sb.auth.signOut({ scope: "local" });
   } catch (e) {
-    console.error("LOGOUT: exception", e);
-  } finally {
-    try {
-      await refreshAuthUI();
-      console.log("LOGOUT: UI refreshed");
-    } finally {
-      el("btnLogout").disabled = false;
-      // jei kazkas vis tiek uzstrigo su sesija – priverstinis reload
-      setTimeout(() => location.reload(), 150);
-    }
+    console.warn("signOut failed (ignored):", e);
   }
+
+  // 3) BRUTALUS VALYMAS: išvalom supabase tokeną (project ref iš tavo URL)
+  const ref = "dvwatiyiwpsrtdkbwkhj";
+  const key = `sb-${ref}-auth-token`;
+
+  try { localStorage.removeItem(key); } catch (_) {}
+  try { sessionStorage.removeItem(key); } catch (_) {}
+
+  // kartais supabase pasideda dar variantų – pravalom visus raktus su ref
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.includes(`sb-${ref}`)) localStorage.removeItem(k);
+    }
+  } catch (_) {}
+
+  // 4) UI į login būseną + reload (kad tikrai nebūtų cache)
+  await refreshAuthUI();
+  location.reload();
 });
 
   // ---------- Geocode (Norway only) ----------
