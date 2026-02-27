@@ -121,15 +121,26 @@ async function refreshAuthUI() {
   });
 
   el("btnLogout").addEventListener("click", async () => {
+  console.log("LOGOUT: clicked");
+
+  // kad mygtukas nebutu spaudomas 10 kartu
+  el("btnLogout").disabled = true;
+
   try {
-    console.log("LOGOUT: start");
-    const { error } = await sb.auth.signOut();
-    console.log("LOGOUT: done", error ? error.message : "OK");
+    // ✅ patikimiausia: local signout (be network/global)
+    const { error } = await sb.auth.signOut({ scope: "local" });
+    console.log("LOGOUT: signOut(local)", error ? error.message : "OK");
   } catch (e) {
     console.error("LOGOUT: exception", e);
   } finally {
-    await refreshAuthUI();
-    console.log("LOGOUT: UI refreshed");
+    try {
+      await refreshAuthUI();
+      console.log("LOGOUT: UI refreshed");
+    } finally {
+      el("btnLogout").disabled = false;
+      // jei kazkas vis tiek uzstrigo su sesija – priverstinis reload
+      setTimeout(() => location.reload(), 150);
+    }
   }
 });
 
