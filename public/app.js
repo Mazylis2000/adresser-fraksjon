@@ -121,28 +121,39 @@ async function refreshAuthUI() {
   });
 
 el("btnLogout").addEventListener("click", async () => {
-  alert("Logout clicked");
+  // 0) iškart perjunk UI į login (kad vartotojui būtų aišku)
+  setText("authStatus", "Auth: ikke logget inn");
+  setText("roleStatus", "Role: -");
+  el("adminBox").classList.add("hide");
+  showLogin("Logget ut.");
 
+  // 1) bandom normalų logout
   try {
     await sb.auth.signOut({ scope: "global" });
   } catch (e) {
     console.warn("signOut failed (ignored):", e);
   }
 
-  // brutaliai išvalom tokenus
+  // 2) brutaliai išvalom visus supabase-related keys (v2 ir senesnius)
   const ref = "dvwatiyiwpsrtdkbwkhj";
+
   try {
     for (const k of Object.keys(localStorage)) {
-      if (k.includes(`sb-${ref}`)) localStorage.removeItem(k);
-    }
-  } catch (_) {}
-  try {
-    for (const k of Object.keys(sessionStorage)) {
-      if (k.includes(`sb-${ref}`)) sessionStorage.removeItem(k);
+      if (k.includes(`sb-${ref}`) || k.toLowerCase().includes("supabase")) {
+        localStorage.removeItem(k);
+      }
     }
   } catch (_) {}
 
-  // ir iškart perkraunam (be refreshAuthUI)
+  try {
+    for (const k of Object.keys(sessionStorage)) {
+      if (k.includes(`sb-${ref}`) || k.toLowerCase().includes("supabase")) {
+        sessionStorage.removeItem(k);
+      }
+    }
+  } catch (_) {}
+
+  // 3) kietas reload į tą patį puslapį
   location.href = location.origin + location.pathname;
 });
 
